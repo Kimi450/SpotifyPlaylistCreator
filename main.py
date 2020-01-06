@@ -1,7 +1,31 @@
-import requests, json, base64
+import requests, json, base64, sys, spotipy
 from config import CLIENT_ID, CLIENT_SECRET, USER
-import sys, spotipy
 import spotipy.util as util
+from os import listdir
+from os.path import isfile, join
+
+def get_ext_files(path,extensions, verbose = False):
+    if verbose:
+        print(f"Retrieving files from path and extensions:\n{path}\n{extensions}...")
+    files = []
+    for f in listdir(path):
+        # print(f)
+        if isfile(join(path, f)):
+            ext = f.split(".")
+            # print(len(ext))
+            if len(ext)>1:
+                ext = ext[-1]
+            else:
+                continue
+            if ext.lower() in extensions:
+                files.append(f)
+            else:
+                print(f"{f} not considered")
+    # for file in files:
+        # print(file)
+    if verbose:
+        print(f"...{len(files)} files found")
+    return files
 
 def create_playlist(user, name, description, token, public = False):
 
@@ -58,31 +82,43 @@ def add_to_playlist(playlist_id, uris, token):
     print("Done!")
     return True
 
-TOKEN = get_token(CLIENT_ID, CLIENT_SECRET,USER,"playlist-modify-private")
-# response = create_playlist(USER, "Old", "Music I had before I migrated to Spotify.", TOKEN)
-# playlist_id = response.json()['id']
-# print(playlist_id)
-playlist_id = "0c19QMpcD16HLXrX1DdmS9"
-endpoint_url = "https://api.spotify.com/v1/search?"
-type = "track"
+def main():
+    if len(sys.argv) == 2:
+        path = sys.argv[1]
+    else:
+        print("usage:\npython main.py PATH")
+        sys.exit()
+    files = get_ext_files(path,["mp3", "m4a", "wav", "flac"])
 
-artist = "michael jackson"
-track = "bad"
-q = artist + " " + track
+    TOKEN = get_token(CLIENT_ID, CLIENT_SECRET,USER,"playlist-modify-private")
+    # response = create_playlist(USER, "Old", "Music I had before I migrated to Spotify.", TOKEN)
+    # playlist_id = response.json()['id']
+    # print(playlist_id)
+    playlist_id = "0c19QMpcD16HLXrX1DdmS9"
+    endpoint_url = "https://api.spotify.com/v1/search?"
+    type = "track"
 
-# PERFORM THE QUERY
-query = f"{endpoint_url}q={q}&type={type}&limit=10"
+    artist = "michael jackson"
+    track = "bad"
+    q = artist + " " + track
 
-response = requests.get(query,
-                        headers={"Content-Type":"application/json",
-                        "Authorization":f"Bearer {TOKEN}"})
-json_response = response.json()
-# print(json_response)
-uris = []
-for i,j in enumerate(json_response['tracks']["items"]):
-    uri = j["uri"]
-    uris.append(uri)
-    print(i, uri, j["name"])
+    # PERFORM THE QUERY
+    query = f"{endpoint_url}q={q}&type={type}&limit=10"
+
+    response = requests.get(query,
+                            headers={"Content-Type":"application/json",
+                            "Authorization":f"Bearer {TOKEN}"})
+    json_response = response.json()
+    # print(json_response)
+    uris = []
+    for i,j in enumerate(json_response['tracks']["items"]):
+        uri = j["uri"]
+        uris.append(uri)
+        print(i, uri, j["name"])
 
 
-add_to_playlist(playlist_id, uris, TOKEN)
+    add_to_playlist(playlist_id, uris, TOKEN)
+
+
+if __name__ == "__main__":
+    main()
