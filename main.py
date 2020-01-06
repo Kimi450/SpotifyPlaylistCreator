@@ -1,13 +1,11 @@
-import requests
-import requests
-import json
-import base64
+import requests, json, base64
 from config import CLIENT_ID, CLIENT_SECRET, USER
+import sys, spotipy
+import spotipy.util as util
 
+def create_playlist(user, name, description, token, public = False):
 
-def create_playlist(user_id, name, description, token, public = False):
-
-    endpoint_url = f"https://api.spotify.com/v1/users/{user_id}/playlists"
+    endpoint_url = f"https://api.spotify.com/v1/users/{user}/playlists"
 
     request_body = json.dumps({
               "name": name,
@@ -18,11 +16,13 @@ def create_playlist(user_id, name, description, token, public = False):
                             data = request_body,
                             headers={"Content-Type":"application/json",
                                      "Authorization":f"Bearer {token}"})
-    print(response.json())
-    url = response.json()['external_urls']['spotify']
-    return response.status_code, url
+    # print(response.json())
+    # url = response.json()['external_urls']['spotify']
+    return response
 
 def get_token_old(client_id, client_secret):
+    # limited usage, hence not using
+
     # get token using the Client Credentials Flow
     # https://developer.spotify.com/documentation/general/guides/authorization-guide/
 
@@ -36,20 +36,34 @@ def get_token_old(client_id, client_secret):
                                      "Authorization":f"Basic {basic}"})
     return response.json()["access_token"]
 
-def get_token(client_id, client_secret, scope):
+def get_token(client_id, client_secret, user, scope, redirect_uri = "http://localhost/"):
+    # using the spotipy library to perform user level auth
     url = "https://accounts.spotify.com/authorize?"
+    token = util.prompt_for_user_token(user,scope, client_id = client_id,
+                                       client_secret = client_secret,
+                                       redirect_uri = redirect_uri)
+    return token
 
-    query = f"{url}client_id={client_id}&response_type=code&redirect_uri=https%3A%2F%2Fwww.google.com%2F&state=lol&scope={scope}"
-    # print(query)
-    response = requests.get(query)
-    response_url = response.url
+def add_to_playlist(playlist_id, uris, token):
 
-TOKEN = get_token(CLIENT_ID, CLIENT_SECRET,"playlist-modify-public")
+    # FILL THE NEW PLAYLIST WITH THE RECOMMENDATIONS
+    endpoint_url = f"https://api.spotify.com/v1/playlists/{playlist_id}/tracks"
 
-create_playlist(USER_ID, "Old", "Music I had before I migrated to Spotify.", TOKEN)
+    request_body = json.dumps({
+              "uris" : uris
+            })
+    response = requests.post(url = endpoint_url, data = request_body,
+                            headers={"Content-Type":"application/json",
+                                     "Authorization":f"Bearer {token}"})
+    print("Done!")
+    return True
 
+TOKEN = get_token(CLIENT_ID, CLIENT_SECRET,USER,"playlist-modify-private")
+# response = create_playlist(USER, "Old", "Music I had before I migrated to Spotify.", TOKEN)
+# playlist_id = response.json()['id']
+# print(playlist_id)
+playlist_id = "0c19QMpcD16HLXrX1DdmS9"
 endpoint_url = "https://api.spotify.com/v1/search?"
-
 type = "track"
 
 artist = "michael jackson"
@@ -57,11 +71,11 @@ track = "bad"
 q = artist + " " + track
 
 # PERFORM THE QUERY
-query = f"{endpoint_url}q={q}&type={type}"
+query = f"{endpoint_url}q={q}&type={type}&limit=10"
 
 response = requests.get(query,
                         headers={"Content-Type":"application/json",
-                        "Authorization":f"Bearer {token}"})
+                        "Authorization":f"Bearer {TOKEN}"})
 json_response = response.json()
 # print(json_response)
 uris = []
@@ -70,21 +84,5 @@ for i,j in enumerate(json_response['tracks']["items"]):
     uris.append(uri)
     print(i, uri, j["name"])
 
-"""
 
-# FILL THE NEW PLAYLIST WITH THE RECOMMENDATIONS
-
-playlist_id = response.json()['id']
-
-endpoint_url = base + f"/playlists/{playlist_id}/tracks"
-
-request_body = json.dumps({
-          "uris" : uris
-        })
-response = requests.post(url = endpoint_url, data = request_body, headers={"Content-Type":"application/json",
-                        "Authorization":f"Bearer {token}"})
-
-print(response.status_code)
-201
-print(f'Your playlist is ready at {url}')
-"""
+add_to_playlist(playlist_id, uris, TOKEN)

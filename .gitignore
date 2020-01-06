@@ -2,3 +2,4 @@ config.py
 url
 env
 __pycache__
+.cache*
