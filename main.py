@@ -4,23 +4,27 @@ import spotipy.util as util
 from os import listdir
 from os.path import isfile, join
 
-def get_ext_files(path,extensions, verbose = False):
+def get_ext_files(path,extensions, verbose = False, include_extension = True):
     if verbose:
         print(f"Retrieving files from path and extensions:\n{path}\n{extensions}...")
     files = []
-    for f in listdir(path):
-        # print(f)
-        if isfile(join(path, f)):
-            ext = f.split(".")
-            # print(len(ext))
-            if len(ext)>1:
-                ext = ext[-1]
+    for file in listdir(path):
+        # print(file)
+        if isfile(join(path, file)):
+
+            file_split = file.rsplit(".",1)
+            # print(len(file_split))
+            if len(file_split)>1:
+                ext = file_split[-1]
             else:
                 continue
             if ext.lower() in extensions:
-                files.append(f)
+                if include_extension:
+                    files.append(file)
+                else:
+                    files.append(file_split[0])
             else:
-                print(f"{f} not considered")
+                print(f"{file} not considered")
     # for file in files:
         # print(file)
     if verbose:
@@ -42,6 +46,9 @@ def create_playlist(user, name, description, token, public = False):
                                      "Authorization":f"Bearer {token}"})
     # print(response.json())
     # url = response.json()['external_urls']['spotify']
+    print(response.status_code)
+    if response.status_code != 201:
+        raise APIError(f"Couldn't create playlist \"{name}\" for \"{user}\"")
     return response
 
 def get_token_old(client_id, client_secret):
@@ -68,18 +75,21 @@ def get_token(client_id, client_secret, user, scope, redirect_uri = "http://loca
                                        redirect_uri = redirect_uri)
     return token
 
+class APIError(Exception):
+    pass
+
 def add_to_playlist(playlist_id, uris, token):
 
     # FILL THE NEW PLAYLIST WITH THE RECOMMENDATIONS
     endpoint_url = f"https://api.spotify.com/v1/playlists/{playlist_id}/tracks"
-
     request_body = json.dumps({
               "uris" : uris
             })
     response = requests.post(url = endpoint_url, data = request_body,
                             headers={"Content-Type":"application/json",
                                      "Authorization":f"Bearer {token}"})
-    print("Done!")
+    if response.status_code != 201:
+        raise APIError(f"Couldn't add uris \"{uris}\" to playlist_id \"{playlist_id}\"")
     return True
 
 def main():
@@ -88,37 +98,50 @@ def main():
     else:
         print("usage:\npython main.py PATH")
         sys.exit()
-    files = get_ext_files(path,["mp3", "m4a", "wav", "flac"])
 
     TOKEN = get_token(CLIENT_ID, CLIENT_SECRET,USER,"playlist-modify-private")
+
+    playlist_id = "5z4DQFUNLKmiN7au7dK781"
+
+    # uncomment the below 3 lines if you want to create a new folder
+
     # response = create_playlist(USER, "Old", "Music I had before I migrated to Spotify.", TOKEN)
     # playlist_id = response.json()['id']
     # print(playlist_id)
-    playlist_id = "0c19QMpcD16HLXrX1DdmS9"
+
     endpoint_url = "https://api.spotify.com/v1/search?"
     type = "track"
+    limit = 10
+    files = get_ext_files(path,["mp3", "m4a", "wav", "flac"],
+                          include_extension=False)
+    unknown_files = []
+    for count, file in enumerate(files):
+        # file = "Cold Water (feat. Justin Bieber"
 
-    artist = "michael jackson"
-    track = "bad"
-    q = artist + " " + track
+        print(f"{count+1:>5} --- FILE ---> {file}")
+        query = f"{endpoint_url}q={file}&type={type}&limit={limit}"
 
-    # PERFORM THE QUERY
-    query = f"{endpoint_url}q={q}&type={type}&limit=10"
+        response = requests.get(query,
+                                headers={"Content-Type":"application/json",
+                                "Authorization":f"Bearer {TOKEN}"})
+        json_response = response.json()
+        # print(f"{file}\n{query}\n\n{json_response}\n\n")
+        uris = []
+        for item_index, item in enumerate(json_response['tracks']["items"]):
+            uri = item["uri"]
+            uris.append(uri)
+            # print(item    _index, uri, item["name"])
 
-    response = requests.get(query,
-                            headers={"Content-Type":"application/json",
-                            "Authorization":f"Bearer {TOKEN}"})
-    json_response = response.json()
-    # print(json_response)
-    uris = []
-    for i,j in enumerate(json_response['tracks']["items"]):
-        uri = j["uri"]
-        uris.append(uri)
-        print(i, uri, j["name"])
+        if len(uris) == 0:
+            print(f"*** Not found on Spotify: \"{file}\"")
+            unknown_files.append(file)
+            continue
 
+        add_to_playlist(playlist_id, [uris[0]], TOKEN)
 
-    add_to_playlist(playlist_id, uris, TOKEN)
+    print("These were not found:")
+    for i in unknown_files: print("\t",i)
 
-
+    return unknown_files
 if __name__ == "__main__":
     main()
