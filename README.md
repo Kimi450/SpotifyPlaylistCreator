@@ -10,3 +10,4 @@ Fill in the required details in `config.py`
 - requests
 - spotipy
 - python-Levenshtein
+- tinytag
