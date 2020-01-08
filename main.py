@@ -2,46 +2,33 @@ import requests, json, base64, sys, spotipy
 from config import CLIENT_ID, CLIENT_SECRET, USER
 import spotipy.util as util
 from os import listdir
-from os.path import isfile, join
+from os.path import isfile, join, splitext
 
 from Levenshtein import distance
 
 from tinytag import TinyTag
 from apierror import APIError
 
-def get_files(path,extensions, verbose = False, include_extension = True):
+def get_files(path, extensions, verbose=False):
     """
     Returns the files of specified "extensions" from the passed in "path".
-    Can choose to include extensions in the file name (default to True).
     The verbose tag prints out more messages.
     """
     if verbose:
         print(f"Retrieving files from path and extensions:\n{path}\n{extensions}...")
     files = []
     for file in listdir(path):
-        # print(file)
         if isfile(join(path, file)):
-
-            file_split = file.rsplit(".",1)
-            # print(len(file_split))
-            if len(file_split)>1:
-                ext = file_split[-1]
-            else:
-                continue
+            base, ext = split_file(file)
             if ext.lower() in extensions:
-                if include_extension:
-                    files.append(file)
-                else:
-                    files.append(file_split[0])
+                files.append(file)
             else:
                 print(f"{file} not considered")
-    # for file in files:
-        # print(file)
     if verbose:
         print(f"...{len(files)} files found")
     return files
 
-def get_token(client_id, client_secret, user, scope, redirect_uri = "http://localhost/"):
+def get_token(client_id, client_secret, user, scope, redirect_uri="http://localhost/"):
     """
     Returns a User Credential Flow token
     using the spotipy library to perform the auth
@@ -130,8 +117,6 @@ def get_best_match_uri(items, file):
     for item_index, item in enumerate(items):
         name = item["name"]
         edit_dist_name = distance(file,name)
-        # if item_index == 0:
-        #     print()
         # print(f"{edit_dist_name:>2}: {file} -> {name}")
         if edit_dist_name <= best_match_cost:
             # print(get_spotify_album_data(item))
@@ -141,6 +126,11 @@ def get_best_match_uri(items, file):
             best_match_uri = uri
 
     return best_match_uri
+
+def split_file(file):
+    base, ext = splitext(file)
+    ext = ext.replace(".", "", 1)
+    return (base, ext)
 
 def add_files_to_playlist(path, files, playlist_id, token, type = "track"):
     """
@@ -154,37 +144,34 @@ def add_files_to_playlist(path, files, playlist_id, token, type = "track"):
     limit = 10
     for count, file in enumerate(files):
         og_file = file
+        file_name, file_ext = split_file(file)
 
-        file_split = file.rsplit(".",1)
-
-        file_name = file_split[0]
-        file_ext = file_split[1]
-
-        file_metadata = TinyTag.get(path+"\\"+file_name+"."+file_ext)
+        file_path = join(path,f"{file_name}.{file_ext}")
+        file_metadata = TinyTag.get(file_path)
 
         file_title = file_metadata.title
         file_artist = file_metadata.artist
         # if these are Nones, the strip and join will fail
-        if file_title == None:
-            file_title = ""
-        if file_artist == None:
-            file_artist = ""
+        file_title = file_title if file_title else ""
+        file_artist = file_artist if file_artist else ""
+
         file_title = file_title.strip('\x00')
         file_artist = file_artist.strip('\x00')
 
         file_set = {file_title, file_artist} # to remove duplicates
 
-        if not(len(file_set)==1 and list(file_set)[0] == ""):
-            # if its not a set of 1 element with an empty string,
-            # use the attributes found by joining to do the search
-            file = " ".join(file_set)
-        else:
-            # else just use the file name
+        if file_set == {""}:
+            # if its a set of just an empty string, use the file
+            # name for the search
             file = file_name
+        else:
+            # else use the attributes found, by joining them
+            # with a space to do the search
+            file = " ".join(file_set)
 
+        file = file.replace("#","") # to remove "#" that act as IDs in the URL
         print(f"{count+1:>5} --- File ", end="")
         query = f"{endpoint_url}q={file}&type={type}&limit={limit}"
-
         response = requests.get(query,
                                 headers={"Content-Type":"application/json",
                                          "Authorization":f"Bearer {token}"})
@@ -199,7 +186,7 @@ def add_files_to_playlist(path, files, playlist_id, token, type = "track"):
 
         if best_match_uri == None:
             # if not match found, make a note of the file and go to the next one
-            print(f"NOT found on Spotify: \"{og_file}\"")
+            print(f"NOT found on Spotify: \"{file}\"")
             unknown_files.append(og_file)
             continue
 
@@ -222,16 +209,14 @@ def main():
         print("usage:\npython main.py PATH")
         sys.exit()
     TOKEN = get_token(CLIENT_ID, CLIENT_SECRET,USER,"playlist-modify-private")
-    # playlist_id = "3wHBsOQj4LfMgai3vOjdWB"
+    playlist_id = "0aIyRup0xOjwbY0Ncw8dY2"
     response = create_playlist(USER, "Old",
                                "Music I had before I migrated to Spotify.",
                                TOKEN)
     playlist_id = response.json()['id']
     print(playlist_id)
-    files = get_files(path, ["mp3", "m4a", "wav", "flac"],
-                      include_extension = True)
+    files = get_files(path, ["mp3", "m4a", "wav", "flac"])
 
-    # files = files[949:]
     unknown_files = add_files_to_playlist(path, files,playlist_id, TOKEN)
     print(f"{len(files)-len(unknown_files)}/{len(files)} were found")
     file_name = "unknown_files.txt"
