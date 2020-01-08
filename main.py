@@ -187,7 +187,7 @@ def add_files_to_playlist(path, files, playlist_id, token, type = "track"):
         if best_match_uri == None:
             # if not match found, make a note of the file and go to the next one
             print(f"NOT found on Spotify: \"{file}\"")
-            unknown_files.append(og_file)
+            unknown_files.append((og_file,file_artist,file_title))
             continue
 
         # add the best URI to the playlist
@@ -208,22 +208,27 @@ def main():
     else:
         print("usage:\npython main.py PATH")
         sys.exit()
+
     TOKEN = get_token(CLIENT_ID, CLIENT_SECRET,USER,"playlist-modify-private")
+
     playlist_id = "0aIyRup0xOjwbY0Ncw8dY2"
     response = create_playlist(USER, "Old",
                                "Music I had before I migrated to Spotify.",
                                TOKEN)
     playlist_id = response.json()['id']
     print(playlist_id)
+
     files = get_files(path, ["mp3", "m4a", "wav", "flac"])
 
     unknown_files = add_files_to_playlist(path, files,playlist_id, TOKEN)
+
     print(f"{len(files)-len(unknown_files)}/{len(files)} were found")
-    file_name = "unknown_files.txt"
+    file_name = "unknown_files.csv"
     print(f"** Unknown files will be written to {file_name} in app home dir **")
     with open(file_name, "w", encoding = "utf-8") as output:
+        output.write("actual_file_name,file_artist,file_title,\n")
         for file in unknown_files:
-            output.write(file + "\n")
+            output.write(f"{file[0]},{file[1]},{file[2]},\n")
 
 if __name__ == "__main__":
     main()
