@@ -137,67 +137,79 @@ def add_files_to_playlist(path, files, playlist_id, token, type = "track"):
     Search tracks the files in list "files" on Spotify
     and add them to "playlist_id"
     Raises APIError if the search query fails.
-    Return the list of unknown files (files not found on spotify)
+    Returns True if successful
     """
-    unknown_files = []
     endpoint_url = "https://api.spotify.com/v1/search?"
     limit = 10
-    for count, file in enumerate(files):
-        og_file = file
-        file_name, file_ext = split_file(file)
+    file_name = "summary.csv"
+    unknown_count = 0
 
-        file_path = join(path,f"{file_name}.{file_ext}")
-        file_metadata = TinyTag.get(file_path)
+    print(f"** All file and their status (FOUND/NOT FOUND) \
+will be written to {file_name} in the app's home dir **")
 
-        file_title = file_metadata.title
-        file_artist = file_metadata.artist
-        # if these are Nones, the strip and join will fail
-        file_title = file_title if file_title else ""
-        file_artist = file_artist if file_artist else ""
+    with open(file_name, "w", encoding = "utf-8") as output:
 
-        file_title = file_title.strip('\x00')
-        file_artist = file_artist.strip('\x00')
+        output.write("status,actual_file_name,file_artist,file_title,\n")
 
-        file_set = {file_title, file_artist} # to remove duplicates
+        for count, file in enumerate(files):
+            og_file = file
+            file_name, file_ext = split_file(file)
 
-        if file_set == {""}:
-            # if its a set of just an empty string, use the file
-            # name for the search
-            file = file_name
-        else:
-            # else use the attributes found, by joining them
-            # with a space to do the search
-            file = " ".join(file_set)
+            file_path = join(path,f"{file_name}.{file_ext}")
+            file_metadata = TinyTag.get(file_path)
 
-        file = file.replace("#","") # to remove "#" that act as IDs in the URL
-        print(f"{count+1:>5} --- File ", end="")
-        query = f"{endpoint_url}q={file}&type={type}&limit={limit}"
-        response = requests.get(query,
-                                headers={"Content-Type":"application/json",
-                                         "Authorization":f"Bearer {token}"})
+            file_title = file_metadata.title
+            file_artist = file_metadata.artist
+            # if these are Nones, the strip and join will fail
+            file_title = file_title if file_title else ""
+            file_artist = file_artist if file_artist else ""
 
-        json_response = response.json()
-        if response.status_code != 200: # not a successful query
-            raise APIError(f"GET request failed: {json_response}")
+            file_title = file_title.strip('\x00')
+            file_artist = file_artist.strip('\x00')
 
-        # get the best URI match between the file and the passed in items
-        best_match_uri = get_best_match_uri(json_response['tracks']["items"],
-                                            file)
+            file_set = {file_title, file_artist} # to remove duplicates
 
-        if best_match_uri == None:
-            # if not match found, make a note of the file and go to the next one
-            print(f"NOT found on Spotify: \"{file}\"")
-            unknown_files.append((og_file,file_artist,file_title))
-            continue
+            if file_set == {""}:
+                # if its a set of just an empty string, use the file
+                # name for the search
+                file = file_name
+            else:
+                # else use the attributes found, by joining them
+                # with a space to do the search
+                file = " ".join(file_set)
 
-        # add the best URI to the playlist
-        add_to_playlist(playlist_id, [best_match_uri], token)
-        print(f"added on spotify    : \"{file}\"")
-        # parsed = json.loads(json.dumps(json_response))
-        # print(json.dumps(parsed, indent=4, sort_keys=True))
+            file = file.replace("#","") # to remove "#" that act as IDs in the URL
+            print(f"{count+1:>5} --- File ", end="")
+            query = f"{endpoint_url}q={file}&type={type}&limit={limit}"
+            response = requests.get(query,
+                                    headers={"Content-Type":"application/json",
+                                             "Authorization":f"Bearer {token}"})
 
-    # return the list of unknown files
-    return unknown_files
+            json_response = response.json()
+            if response.status_code != 200: # not a successful query
+                raise APIError(f"GET request failed: {json_response}")
+
+            # get the best URI match between the file and the passed in items
+            best_match_uri = get_best_match_uri(json_response['tracks']["items"],
+                                                file)
+
+            if best_match_uri == None:
+                # if not match found, make a note of the file and go to the next one
+                print(f"NOT found on Spotify: \"{file}\"")
+                output.write(f"NOT FOUND,{file},{file_artist},{file_title},\n")
+                unknown_count+=1
+                continue
+
+            # add the best URI to the playlist
+            add_to_playlist(playlist_id, [best_match_uri], token)
+            print(f"added on spotify    : \"{file}\"")
+            output.write(f"FOUND,{file},{file_artist},{file_title},\n")
+            # parsed = json.loads(json.dumps(json_response))
+            # print(json.dumps(parsed, indent=4, sort_keys=True))
+
+    print(f"{len(files)-unknown_count}/{len(files)} were found")
+
+    return True
 
 def main():
     """
@@ -220,15 +232,8 @@ def main():
 
     files = get_files(path, ["mp3", "m4a", "wav", "flac"])
 
-    unknown_files = add_files_to_playlist(path, files,playlist_id, TOKEN)
+    add_files_to_playlist(path, files,playlist_id, TOKEN)
 
-    print(f"{len(files)-len(unknown_files)}/{len(files)} were found")
-    file_name = "unknown_files.csv"
-    print(f"** Unknown files will be written to {file_name} in app home dir **")
-    with open(file_name, "w", encoding = "utf-8") as output:
-        output.write("actual_file_name,file_artist,file_title,\n")
-        for file in unknown_files:
-            output.write(f"{file[0]},{file[1]},{file[2]},\n")
 
 if __name__ == "__main__":
     main()
